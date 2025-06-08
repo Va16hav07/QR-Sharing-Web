@@ -452,9 +452,18 @@ app.use((err, req, res, next) => {
     // First connect to MongoDB
     await connectDB();
     
-    // Then start the Express server
-    app.listen(PORT, () => {
+    // Create HTTP server with Express
+    const http = require('http');
+    const server = http.createServer(app);
+    
+    // Configure keep-alive timeout and headers timeout to avoid 502 errors on Render
+    server.keepAliveTimeout = 120000; // 120 seconds
+    server.headersTimeout = 120000; // 120 seconds
+    
+    // Then start the Express server with explicit host binding to 0.0.0.0
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+      console.log(`Server bound to 0.0.0.0 (all network interfaces)`);
       
       // Schedule regular cleanup
       setInterval(cleanupExpiredFiles, CLEANUP_INTERVAL_MS);

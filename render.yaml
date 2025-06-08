@@ -3,7 +3,8 @@ services:
     name: qr-sharing-web
     env: node
     buildCommand: npm install
-    startCommand: node server.js
+    startCommand: npm run start:prod
+    plan: starter
     envVars:
       - key: NODE_ENV
         value: production
