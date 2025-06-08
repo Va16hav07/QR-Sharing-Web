@@ -338,8 +338,18 @@ header p {
   color: var(--text-color);
 }
 
+/* Dark mode style for copy button */
+[data-theme="dark"] .copy-button {
+  background-color: #333333;
+  color: #f5f5f5;
+}
+
 .copy-button:hover {
   background-color: #e0e0e0;
+}
+
+[data-theme="dark"] .copy-button:hover {
+  background-color: #444444;
 }
 
 .share-button {
