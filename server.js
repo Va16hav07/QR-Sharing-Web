@@ -16,8 +16,10 @@ const PORT = process.env.PORT || 3000;
 
 // Configuration
 const FILE_EXPIRY_DAYS = parseInt(process.env.FILE_EXPIRY_DAYS) || 7; // Files will expire after 7 days
+const QUICK_DELETE_MINUTES = 5; // Files can be deleted after 5 minutes
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE) || 50 * 1024 * 1024; // 50MB file size limit
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // Run cleanup once per day
+const QUICK_CLEANUP_INTERVAL_MS = 60 * 1000; // Check for flagged files every minute
 
 // Middlewares
 app.use(cors());
@@ -84,17 +86,27 @@ app.get('/', async (req, res) => {
       .limit(10)
       .lean();
     
+    const now = new Date();
+    
     // Transform the MongoDB documents to match the expected format in the template
-    const formattedFiles = recentFiles.map(file => ({
-      id: file.fileId,
-      originalName: file.originalName,
-      size: file.size,
-      qrCodeUrl: file.qrCodeUrl,
-      downloadUrl: file.downloadUrl,
-      uploadDate: file.uploadDate,
-      expiryDate: file.expiryDate,
-      downloadCount: file.downloadCount
-    }));
+    const formattedFiles = recentFiles.map(file => {
+      const deletionTime = file.flaggedForDeletion && file.deletionDate ? 
+        Math.max(0, Math.floor((new Date(file.deletionDate) - now) / 1000)) : null;
+      
+      return {
+        id: file.fileId,
+        originalName: file.originalName,
+        size: file.size,
+        qrCodeUrl: file.qrCodeUrl,
+        downloadUrl: file.downloadUrl,
+        uploadDate: file.uploadDate,
+        expiryDate: file.expiryDate,
+        downloadCount: file.downloadCount,
+        flaggedForDeletion: file.flaggedForDeletion,
+        deletionDate: file.deletionDate,
+        timeRemaining: deletionTime // seconds remaining before deletion
+      };
+    });
     
     res.render('index', { recentFiles: formattedFiles });
   } catch (error) {
@@ -229,22 +241,65 @@ app.get('/api/recent-files', async (req, res) => {
       .limit(10)
       .lean();
     
+    const now = new Date();
+    
     // Transform the MongoDB documents to match the expected format
-    const formattedFiles = recentFiles.map(file => ({
-      id: file.fileId,
-      originalName: file.originalName,
-      size: file.size,
-      qrCodeUrl: file.qrCodeUrl,
-      downloadUrl: file.downloadUrl,
-      uploadDate: file.uploadDate,
-      expiryDate: file.expiryDate,
-      downloadCount: file.downloadCount
-    }));
+    const formattedFiles = recentFiles.map(file => {
+      const deletionTime = file.flaggedForDeletion && file.deletionDate ? 
+        Math.max(0, Math.floor((new Date(file.deletionDate) - now) / 1000)) : null;
+      
+      return {
+        id: file.fileId,
+        originalName: file.originalName,
+        size: file.size,
+        qrCodeUrl: file.qrCodeUrl,
+        downloadUrl: file.downloadUrl,
+        uploadDate: file.uploadDate,
+        expiryDate: file.expiryDate,
+        downloadCount: file.downloadCount,
+        flaggedForDeletion: file.flaggedForDeletion,
+        deletionDate: file.deletionDate,
+        timeRemaining: deletionTime, // seconds remaining before deletion
+        isExpired: file.expiryDate && new Date(file.expiryDate) < now
+      };
+    });
     
     res.json(formattedFiles);
   } catch (error) {
     console.error('Error fetching recent files for API:', error);
     res.status(500).json({ error: 'Failed to fetch recent files' });
+  }
+});
+
+// API to flag a file for quick deletion
+app.post('/api/delete-file/:fileId', async (req, res) => {
+  try {
+    const fileId = req.params.fileId;
+    
+    // Find the file
+    const file = await File.findOne({ fileId: fileId });
+    
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    // Set deletion flag and time
+    const deletionDate = new Date();
+    deletionDate.setMinutes(deletionDate.getMinutes() + QUICK_DELETE_MINUTES);
+    
+    file.flaggedForDeletion = true;
+    file.deletionDate = deletionDate;
+    
+    await file.save();
+    
+    res.json({ 
+      message: 'File flagged for deletion', 
+      deletionDate: deletionDate,
+      timeRemaining: `${QUICK_DELETE_MINUTES} minutes`
+    });
+  } catch (error) {
+    console.error('Error flagging file for deletion:', error);
+    res.status(500).json({ error: 'Failed to flag file for deletion' });
   }
 });
 
@@ -288,11 +343,39 @@ app.get('/share/:fileId', async (req, res) => {
   }
 });
 
+// Delete file and associated resources
+async function deleteFileResources(record) {
+  const uploadsDir = path.join(__dirname, 'public/uploads');
+  try {
+    // Delete the file
+    const filePath = path.join(uploadsDir, record.filename);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log(`Deleted file: ${filePath}`);
+    }
+    
+    // Delete the QR code
+    const qrPath = path.join(uploadsDir, `${record.fileId}_qr.png`);
+    if (fs.existsSync(qrPath)) {
+      fs.unlinkSync(qrPath);
+      console.log(`Deleted QR code: ${qrPath}`);
+    }
+    
+    // Delete the record from the database
+    await File.deleteOne({ _id: record._id });
+    console.log(`Deleted record for: ${record.originalName}`);
+    
+    return true;
+  } catch (err) {
+    console.error(`Error deleting file resources for ${record.fileId}:`, err);
+    return false;
+  }
+}
+
 // File cleanup function - removes expired files
 async function cleanupExpiredFiles() {
   console.log('Running file cleanup...');
   const now = new Date();
-  const uploadsDir = path.join(__dirname, 'public/uploads');
   
   try {
     // Find expired records in database
@@ -303,33 +386,43 @@ async function cleanupExpiredFiles() {
     console.log(`Found ${expiredRecords.length} expired files to remove`);
     
     // Process each expired file
+    let deletedCount = 0;
     for (const record of expiredRecords) {
-      try {
-        // Delete the file
-        const filePath = path.join(uploadsDir, record.filename);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-          console.log(`Deleted file: ${filePath}`);
-        }
-        
-        // Delete the QR code
-        const qrPath = path.join(uploadsDir, `${record.fileId}_qr.png`);
-        if (fs.existsSync(qrPath)) {
-          fs.unlinkSync(qrPath);
-          console.log(`Deleted QR code: ${qrPath}`);
-        }
-        
-        // Delete the record from the database
-        await File.deleteOne({ _id: record._id });
-        console.log(`Deleted record for: ${record.originalName}`);
-      } catch (err) {
-        console.error(`Error processing expired file ${record.fileId}:`, err);
-      }
+      const success = await deleteFileResources(record);
+      if (success) deletedCount++;
     }
     
-    console.log(`Cleanup complete. Removed ${expiredRecords.length} expired files.`);
+    console.log(`Cleanup complete. Removed ${deletedCount} expired files.`);
   } catch (err) {
     console.error('Error during cleanup process:', err);
+  }
+}
+
+// Quick deletion cleanup function - removes files flagged for deletion
+async function cleanupFlaggedFiles() {
+  const now = new Date();
+  
+  try {
+    // Find records flagged for deletion that have passed their deletion date
+    const flaggedRecords = await File.find({
+      flaggedForDeletion: true,
+      deletionDate: { $lt: now }
+    }).lean();
+    
+    if (flaggedRecords.length > 0) {
+      console.log(`Found ${flaggedRecords.length} flagged files to remove`);
+      
+      // Process each flagged file
+      let deletedCount = 0;
+      for (const record of flaggedRecords) {
+        const success = await deleteFileResources(record);
+        if (success) deletedCount++;
+      }
+      
+      console.log(`Quick cleanup complete. Removed ${deletedCount} flagged files.`);
+    }
+  } catch (err) {
+    console.error('Error during quick cleanup process:', err);
   }
 }
 
@@ -365,6 +458,9 @@ app.use((err, req, res, next) => {
       
       // Schedule regular cleanup
       setInterval(cleanupExpiredFiles, CLEANUP_INTERVAL_MS);
+      
+      // Schedule quick cleanup for flagged files
+      setInterval(cleanupFlaggedFiles, QUICK_CLEANUP_INTERVAL_MS);
       
       // Also run cleanup on server start
       cleanupExpiredFiles();

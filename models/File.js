@@ -43,6 +43,14 @@ const fileSchema = new mongoose.Schema({
   downloadCount: {
     type: Number,
     default: 0
+  },
+  flaggedForDeletion: {
+    type: Boolean,
+    default: false
+  },
+  deletionDate: {
+    type: Date,
+    default: null
   }
 });
 

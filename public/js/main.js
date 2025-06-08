@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const shareButton = document.querySelector('#shareButton');
   const newUploadButton = document.querySelector('#newUploadButton');
   const themeToggle = document.querySelector('#themeToggle');
+  const deleteButtons = document.querySelectorAll('.delete-button');
+  const countdownTimers = document.querySelectorAll('.countdown-timer');
 
   // Handle file selection
   fileInput.addEventListener('change', handleFileSelect);
@@ -86,6 +88,22 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Initialize theme from localStorage
   initTheme();
+
+  // Add event listeners for delete buttons
+  deleteButtons.forEach(button => {
+    button.addEventListener('click', handleFileDelete);
+  });
+  
+  // Initialize any existing countdown timers for files already flagged for deletion
+  countdownTimers.forEach(timer => {
+    const deletionDateStr = timer.getAttribute('data-deletion-date');
+    if (deletionDateStr) {
+      startDeleteCountdown(timer, deletionDateStr);
+    }
+  });
+  
+  // Set up refresh interval to check for updates
+  setInterval(refreshFileList, 60000); // Refresh every minute
 
   // Functions
   function formatFileSize(bytes) {
@@ -253,5 +271,195 @@ document.addEventListener('DOMContentLoaded', () => {
       document.documentElement.setAttribute('data-theme', 'dark');
       themeToggle.querySelector('i').className = 'fas fa-sun';
     }
+  }
+  
+  // Handle file deletion
+  function handleFileDelete(e) {
+    const button = e.currentTarget;
+    const fileId = button.getAttribute('data-file-id');
+    
+    if (!fileId) return;
+    
+    // Confirm deletion
+    if (!confirm('Flag this file for deletion? It will be automatically deleted after 5 minutes.')) {
+      return;
+    }
+    
+    // Change button appearance
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.disabled = true;
+    
+    // Call the API
+    fetch(`/api/delete-file/${fileId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Failed to flag file for deletion');
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('File flagged for deletion:', data);
+      
+      // Update UI to show countdown
+      const listItem = button.closest('.recent-file-item');
+      if (listItem) {
+        // Add a deletion indicator
+        const deletionIndicator = document.createElement('div');
+        deletionIndicator.className = 'deletion-countdown';
+        deletionIndicator.innerHTML = `
+          <i class="fas fa-clock"></i>
+          <span class="countdown-text">Deleting in <span class="countdown-timer">5:00</span></span>
+        `;
+        
+        // Insert after file info
+        const fileInfo = listItem.querySelector('.file-info-compact');
+        fileInfo.parentNode.insertBefore(deletionIndicator, fileInfo.nextSibling);
+        
+        // Add flagged-for-deletion class to list item
+        listItem.classList.add('flagged-for-deletion');
+        
+        // Replace delete button with cancellation notice
+        button.innerHTML = '<i class="fas fa-trash-alt"></i>';
+        button.classList.add('deleting');
+        button.disabled = true;
+        button.title = 'Deleting soon';
+        
+        // Start countdown
+        startDeleteCountdown(deletionIndicator.querySelector('.countdown-timer'), data.deletionDate);
+      }
+      
+      // Show success notification
+      showSuccessMessage('File flagged for deletion. It will be removed in 5 minutes.');
+    })
+    .catch(error => {
+      console.error('Error flagging file for deletion:', error);
+      button.innerHTML = '<i class="fas fa-trash-alt"></i>';
+      button.disabled = false;
+      showErrorMessage('Error flagging file for deletion. Please try again.');
+    });
+  }
+  
+  // Start countdown timer
+  function startDeleteCountdown(timerElement, deletionDateString) {
+    if (!timerElement) return;
+    
+    const deletionDate = new Date(deletionDateString);
+    
+    // Update every second
+    const interval = setInterval(() => {
+      const now = new Date();
+      const timeLeft = deletionDate - now;
+      
+      if (timeLeft <= 0) {
+        clearInterval(interval);
+        timerElement.textContent = 'Deleted';
+        // Optionally remove element from list or add "deleted" styling
+        const listItem = timerElement.closest('.recent-file-item');
+        if (listItem) {
+          // Add fade-out animation
+          listItem.classList.add('file-deleted');
+          // Remove after animation
+          setTimeout(() => {
+            listItem.remove();
+          }, 1000);
+        }
+        return;
+      }
+      
+      // Calculate minutes and seconds
+      const minutes = Math.floor(timeLeft / 60000);
+      const seconds = Math.floor((timeLeft % 60000) / 1000);
+      
+      // Update timer display
+      timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }, 1000);
+  }
+  
+  // Show success message
+  function showSuccessMessage(message) {
+    // Create notification element if it doesn't exist
+    let notification = document.getElementById('notification');
+    if (!notification) {
+      notification = document.createElement('div');
+      notification.id = 'notification';
+      notification.className = 'notification';
+      document.body.appendChild(notification);
+    }
+    
+    notification.className = 'notification success';
+    notification.textContent = message;
+    notification.classList.add('show');
+    
+    // Auto hide after 5 seconds
+    setTimeout(() => {
+      notification.classList.remove('show');
+    }, 5000);
+  }
+  
+  // Refresh file list periodically to update deletion status
+  function refreshFileList() {
+    const recentFilesContainer = document.getElementById('recentFiles');
+    if (!recentFilesContainer) return;
+    
+    fetch('/api/recent-files')
+      .then(response => response.json())
+      .then(files => {
+        // Check if we need to update any deletion statuses
+        if (document.querySelector('.recent-file-item')) {
+          files.forEach(file => {
+            if (file.flaggedForDeletion) {
+              const listItem = document.querySelector(`.recent-file-item [data-file-id="${file.id}"]`)?.closest('.recent-file-item');
+              
+              if (listItem && !listItem.classList.contains('flagged-for-deletion')) {
+                listItem.classList.add('flagged-for-deletion');
+                
+                // Add countdown if not already present
+                if (!listItem.querySelector('.deletion-countdown')) {
+                  const deletionIndicator = document.createElement('div');
+                  deletionIndicator.className = 'deletion-countdown';
+                  deletionIndicator.innerHTML = `
+                    <i class="fas fa-clock"></i>
+                    <span class="countdown-text">Deleting soon...</span>
+                  `;
+                  
+                  const fileInfo = listItem.querySelector('.file-info-compact');
+                  fileInfo.parentNode.insertBefore(deletionIndicator, fileInfo.nextSibling);
+                  
+                  // Update button
+                  const button = listItem.querySelector('.delete-button');
+                  if (button) {
+                    button.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                    button.classList.add('deleting');
+                    button.disabled = true;
+                    button.title = 'Deleting soon';
+                  }
+                }
+              }
+            }
+          });
+          
+          // Check for deleted files that are still in the UI
+          const currentFileIds = files.map(file => file.id);
+          document.querySelectorAll('.recent-file-item').forEach(item => {
+            const fileButton = item.querySelector('.delete-button');
+            if (fileButton) {
+              const fileId = fileButton.getAttribute('data-file-id');
+              if (fileId && !currentFileIds.includes(fileId)) {
+                // File was deleted from server, animate removal
+                item.classList.add('file-deleted');
+                setTimeout(() => {
+                  item.remove();
+                }, 1000);
+              }
+            }
+          });
+        }
+      })
+      .catch(err => console.error('Error refreshing file list:', err));
   }
 });
