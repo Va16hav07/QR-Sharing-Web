@@ -1,0 +1,30 @@
+{
+  "name": "qr-sharing-web",
+  "version": "1.0.0",
+  "description": "File sharing web application with QR code generation capability",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "build": "echo 'Build completed'",
+    "render-postbuild": "mkdir -p public/uploads"
+  },
+  "keywords": ["file-sharing", "qr-code", "express", "nodejs", "mongodb"],
+  "author": "Vaibhav Kumawat",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "ejs": "^3.1.10",
+    "express": "^5.1.0",
+    "mongoose": "^8.15.1",
+    "multer": "^2.0.1",
+    "qrcode": "^1.5.4",
+    "shortid": "^2.2.17"
+  }
+}

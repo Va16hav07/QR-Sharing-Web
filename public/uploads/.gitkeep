@@ -1,0 +1,5 @@
+# This folder contains uploaded files
+# and generated QR codes
+
+# This .gitkeep file ensures that the directory is tracked by Git
+# even though it's initially empty

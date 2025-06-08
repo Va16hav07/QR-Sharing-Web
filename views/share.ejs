@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Share File - QR File Sharing</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1><i class="fas fa-qrcode"></i> QR File Sharing</h1>
+      <p>Share your file with this QR code</p>
+      <button id="themeToggle" class="theme-toggle" aria-label="Toggle dark mode">
+        <i class="fas fa-moon"></i>
+      </button>
+    </header>
+
+    <main>
+      <div class="share-container">
+        <div class="qr-container">
+          <img src="<%= qrCodeUrl %>" alt="QR Code for File Download">
+          <p>Scan this QR code to download the file</p>
+          
+          <% if (fileRecord && fileRecord.expiryDate) { %>
+            <p class="expiry-notice">This link will expire on 
+              <span class="expiry-date"><%= new Date(fileRecord.expiryDate).toLocaleString() %></span>
+            </p>
+          <% } else { %>
+            <p class="expiry-notice">This link will expire after <%= expiryDays %> days</p>
+          <% } %>
+          
+          <% if (fileRecord && fileRecord.originalName) { %>
+            <p class="file-name-display">File: <%= fileRecord.originalName %></p>
+          <% } %>
+        </div>
+
+        <div class="link-container">
+          <input type="text" id="downloadLink" value="<%= downloadUrl %>" readonly>
+          <button class="button copy-button" id="copyButton">
+            <i class="fas fa-copy"></i> Copy Link
+          </button>
+        </div>
+
+        <div class="action-buttons">
+          <a href="/" class="button home-button">
+            <i class="fas fa-home"></i> Back to Home
+          </a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <footer>
+    <p>&copy; 2025 QR File Sharing App</p>
+  </footer>
+
+  <script>
+    // Copy link functionality
+    document.getElementById('copyButton').addEventListener('click', function() {
+      const linkInput = document.getElementById('downloadLink');
+      linkInput.select();
+      document.execCommand('copy');
+      this.innerHTML = '<i class="fas fa-check"></i> Copied!';
+      setTimeout(() => {
+        this.innerHTML = '<i class="fas fa-copy"></i> Copy Link';
+      }, 2000);
+    });
+    
+    // Theme toggle functionality
+    document.addEventListener('DOMContentLoaded', () => {
+      const themeToggle = document.querySelector('#themeToggle');
+      
+      themeToggle.addEventListener('click', function() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        
+        // Update icon
+        const iconElement = themeToggle.querySelector('i');
+        iconElement.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+      });
+      
+      // Initialize theme
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        
+        // Update icon
+        const iconElement = themeToggle.querySelector('i');
+        iconElement.className = savedTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+      }
+    });
+  </script>
+</body>
+</html>
