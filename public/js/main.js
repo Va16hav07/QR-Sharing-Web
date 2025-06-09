@@ -20,7 +20,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Handle file selection
   fileInput.addEventListener('change', handleFileSelect);
-  dropZone.addEventListener('click', () => fileInput.click());
+  
+  // Make the entire drop zone clickable to select files
+  dropZone.addEventListener('click', function(e) {
+    e.preventDefault(); // Prevent any default action
+    
+    // Only trigger the click if we didn't click on the input itself
+    if (e.target !== fileInput) {
+      fileInput.click();
+    }
+  });
   
   // Drag and drop events
   dropZone.addEventListener('dragover', (e) => {
@@ -116,14 +125,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 
-  function handleFileSelect() {
+  function handleFileSelect(e) {
+    // Get the file from the input element
     const file = fileInput.files[0];
     
+    // If no file was selected, do nothing
     if (!file) return;
     
+    console.log("File selected:", file.name); // Debug log
+    
+    // Update the UI with file details
     fileName.textContent = file.name;
     fileSize.textContent = formatFileSize(file.size);
+    
+    // Show the file info section
     fileInfo.classList.remove('hidden');
+    
+    // Reset the progress bar
     progressContainer.classList.add('hidden');
     uploadProgress.style.width = '0%';
   }
@@ -280,10 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (!fileId) return;
     
-    // Confirm deletion
-    if (!confirm('Flag this file for deletion? It will be automatically deleted after 5 minutes.')) {
-      return;
-    }
+    // No confirmation, delete immediately
     
     // Change button appearance
     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -303,44 +318,28 @@ document.addEventListener('DOMContentLoaded', () => {
       return response.json();
     })
     .then(data => {
-      console.log('File flagged for deletion:', data);
+      console.log('File deleted:', data);
       
-      // Update UI to show countdown
+      // Update UI to remove the file item
       const listItem = button.closest('.recent-file-item');
       if (listItem) {
-        // Add a deletion indicator
-        const deletionIndicator = document.createElement('div');
-        deletionIndicator.className = 'deletion-countdown';
-        deletionIndicator.innerHTML = `
-          <i class="fas fa-clock"></i>
-          <span class="countdown-text">Deleting in <span class="countdown-timer">5:00</span></span>
-        `;
+        // Add deletion animation
+        listItem.classList.add('file-deleted');
         
-        // Insert after file info
-        const fileInfo = listItem.querySelector('.file-info-compact');
-        fileInfo.parentNode.insertBefore(deletionIndicator, fileInfo.nextSibling);
-        
-        // Add flagged-for-deletion class to list item
-        listItem.classList.add('flagged-for-deletion');
-        
-        // Replace delete button with cancellation notice
-        button.innerHTML = '<i class="fas fa-trash-alt"></i>';
-        button.classList.add('deleting');
-        button.disabled = true;
-        button.title = 'Deleting soon';
-        
-        // Start countdown
-        startDeleteCountdown(deletionIndicator.querySelector('.countdown-timer'), data.deletionDate);
+        // Remove after animation finishes
+        setTimeout(() => {
+          listItem.remove();
+        }, 1000);
       }
       
       // Show success notification
-      showSuccessMessage('File flagged for deletion. It will be removed in 5 minutes.');
-    })
-    .catch(error => {
-      console.error('Error flagging file for deletion:', error);
+      showSuccessMessage('File deleted successfully.');
+  })
+  .catch(error => {
+      console.error('Error deleting file:', error);
       button.innerHTML = '<i class="fas fa-trash-alt"></i>';
       button.disabled = false;
-      showErrorMessage('Error flagging file for deletion. Please try again.');
+      showErrorMessage('Error deleting file. Please try again.');
     });
   }
   

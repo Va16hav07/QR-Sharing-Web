@@ -157,6 +157,7 @@ header p {
   height: 100%;
   opacity: 0;
   cursor: pointer;
+  z-index: -1; /* Place behind other elements to prevent accidental clicks */
 }
 
 .file-info {

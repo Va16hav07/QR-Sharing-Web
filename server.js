@@ -16,8 +16,8 @@ const PORT = process.env.PORT || 3000;
 
 // Configuration
 const FILE_EXPIRY_DAYS = parseInt(process.env.FILE_EXPIRY_DAYS) || 7; // Files will expire after 7 days
-const QUICK_DELETE_MINUTES = 5; // Files can be deleted after 5 minutes
-const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE) || 50 * 1024 * 1024; // 50MB file size limit
+const QUICK_DELETE_MINUTES = 2; // Files can be deleted after 2 minutes
+const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE) || 200 * 1024 * 1024; // 200MB file size limit
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // Run cleanup once per day
 const QUICK_CLEANUP_INTERVAL_MS = 60 * 1000; // Check for flagged files every minute
 
@@ -45,7 +45,7 @@ if (process.env.NODE_ENV !== 'production') {
 const fileFilter = (req, file, cb) => {
   // Blacklist of potentially dangerous file extensions
   const blacklist = [
-    'exe', 'dll', 'bat', 'cmd', 'sh', 'app',
+    'exe', 'dll', 'bat', 'cmd', 'sh',
     'vbs', 'js', 'ws', 'cpl', 'scr', 'hta',
     'msi', 'php', 'pl', 'py', 'rb'
   ];
@@ -122,7 +122,7 @@ app.post('/upload', (req, res) => {
     try {
       if (err) {
         if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({ error: 'File size exceeds the limit (50MB)' });
+          return res.status(400).json({ error: 'File size exceeds the limit (200MB)' });
         }
         return res.status(400).json({ error: err.message || 'File upload error' });
       }
@@ -271,7 +271,7 @@ app.get('/api/recent-files', async (req, res) => {
   }
 });
 
-// API to flag a file for quick deletion
+// API to delete a file immediately
 app.post('/api/delete-file/:fileId', async (req, res) => {
   try {
     const fileId = req.params.fileId;
@@ -283,20 +283,16 @@ app.post('/api/delete-file/:fileId', async (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
     
-    // Set deletion flag and time
-    const deletionDate = new Date();
-    deletionDate.setMinutes(deletionDate.getMinutes() + QUICK_DELETE_MINUTES);
+    // Delete the file immediately
+    const success = await deleteFileResources(file);
     
-    file.flaggedForDeletion = true;
-    file.deletionDate = deletionDate;
-    
-    await file.save();
-    
-    res.json({ 
-      message: 'File flagged for deletion', 
-      deletionDate: deletionDate,
-      timeRemaining: `${QUICK_DELETE_MINUTES} minutes`
-    });
+    if (success) {
+      res.json({ 
+        message: 'File deleted successfully'
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to delete file' });
+    }
   } catch (error) {
     console.error('Error flagging file for deletion:', error);
     res.status(500).json({ error: 'Failed to flag file for deletion' });

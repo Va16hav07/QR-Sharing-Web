@@ -27,7 +27,7 @@
             <i class="fas fa-cloud-upload-alt"></i>
             <span>Drag files here or click to upload</span>
           </span>
-          <input type="file" id="fileInput" class="drop-zone-input">
+          <input type="file" id="fileInput" class="drop-zone-input" accept="*/*" aria-label="Select file to upload">
         </div>
 
         <div class="file-info hidden" id="fileInfo">
@@ -115,7 +115,7 @@
                     <button class="button compact-button delete-button <%= file.flaggedForDeletion ? 'deleting' : '' %>" 
                             data-file-id="<%= file.id %>" 
                             <%= file.flaggedForDeletion ? 'disabled' : '' %>
-                            title="<%= file.flaggedForDeletion ? 'Deleting soon' : 'Delete in 5 minutes' %>">
+                            title="<%= file.flaggedForDeletion ? 'Deleting' : 'Delete file' %>">
                       <i class="fas fa-trash-alt"></i>
                     </button>
                   </div>
@@ -193,12 +193,18 @@
       return 'fas fa-file-video';
     }
     
+    // Mobile app files
+    if (['apk', 'aab', 'app', 'ipa'].includes(extension)) {
+      return 'fas fa-mobile-alt';
+    }
+    
     // Default file icon
     return 'fas fa-file';
   }
   %>
 
   <script src="/js/file-icons.js"></script>
+  <script src="/js/file-upload.js"></script>
   <script src="/js/main.js"></script>
 </body>
 </html>

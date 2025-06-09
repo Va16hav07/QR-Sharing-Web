@@ -65,7 +65,7 @@ This application is configured for easy deployment on Render.
    - `MONGODB_URI`: Your MongoDB connection string (e.g., `mongodb+srv://username:password@cluster.mongodb.net/dbname`)
    - `NODE_ENV`: `production`
    - `FILE_EXPIRY_DAYS`: `7` (or your preferred expiration period)
-   - `MAX_FILE_SIZE`: `52428800` (50MB in bytes)
+   - `MAX_FILE_SIZE`: `209715200` (200MB in bytes)
    - `SESSION_SECRET`: A random string for session security
 6. Deploy the application
 

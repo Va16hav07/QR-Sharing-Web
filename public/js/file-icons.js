@@ -51,6 +51,11 @@ function getFileTypeIcon(filename) {
     return 'fas fa-file-video';
   }
   
+  // Mobile app files
+  if (['apk', 'aab', 'app', 'ipa'].includes(extension)) {
+    return 'fas fa-mobile-alt';
+  }
+  
   // Default file icon
   return 'fas fa-file';
 }
